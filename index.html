@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Retro Space Invaders - 太空侵略者</title>
+  <style>
+    :root {
+      --bg-color: #0b0e14;
+      --card-bg: #151922;
+      --accent: #00ff66;
+      --accent-danger: #ff0055;
+      --accent-info: #00e5ff;
+      --text-main: #ffffff;
+      --text-dim: #8b9bb4;
+      --font-family: 'Courier New', Courier, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      letter-spacing: 4px;
+      color: var(--accent);
+      text-shadow: 0 0 10px rgba(0, 255, 102, 0.5);
+    }
+
+    .main-container {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .game-wrapper {
+      position: relative;
+      border: 3px solid #232c3d;
+      border-radius: 4px;
+      box-shadow: 0 0 25px rgba(0, 0, 0, 0.8);
+      background-color: #000;
+    }
+
+    canvas {
+      display: block;
+      background: radial-gradient(circle at 50% 50%, #050811 0%, #000000 100%);
+    }
+
+    /* 懸浮覆蓋層 (HUD / Modals) */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(11, 14, 20, 0.85);
+      backdrop-filter: blur(4px);
+      text-align: center;
+      padding: 20px;
+    }
+
+    .overlay.hidden {
+      display: none;
+    }
+
+    .overlay h2 {
+      font-size: 2.2rem;
+      margin-bottom: 12px;
+      letter-spacing: 2px;
+    }
+
+    .overlay p {
+      font-size: 1rem;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    .btn {
+      background: transparent;
+      border: 2px solid var(--accent);
+      color: var(--accent);
+      padding: 10px 24px;
+      font-size: 1.1rem;
+      font-family: inherit;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      letter-spacing: 2px;
+    }
+
+    .btn:hover {
+      background: var(--accent);
+      color: #000;
+      box-shadow: 0 0 15px var(--accent);
+      transform: translateY(-2px);
+    }
+
+    /* 側邊資訊面板 */
+    .dashboard {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 320px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid #222b3a;
+      border-radius: 6px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .card h3 {
+      font-size: 1.1rem;
+      border-bottom: 1px dashed #344259;
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+      color: var(--accent-info);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+    }
+
+    .stat-label {
+      color: var(--text-dim);
+    }
+
+    .stat-value {
+      font-weight: bold;
+      color: #fff;
+    }
+
+    /* 歷史紀錄滾動列表 */
+    .history-list {
+      max-height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      padding: 6px 8px;
+      background: #0d1117;
+      border-radius: 4px;
+      border-left: 3px solid #555;
+    }
+
+    .history-item.win {
+      border-left-color: var(--accent);
+    }
+
+    .history-item.loss {
+      border-left-color: var(--accent-danger);
+    }
+
+    .controls-hint {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    .controls-hint kbd {
+      background: #232c3d;
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid #455573;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>SPACE INVADERS</h1>
+  </header>
+
+  <div class="main-container">
+    <!-- 遊戲畫布與畫面覆蓋層 -->
+    <div class="game-wrapper">
+      <canvas id="gameCanvas" width="600" height="650"></canvas>
+
+      <!-- 畫面覆蓋層：開始、暫停、通關、失敗 -->
+      <div id="overlayScreen" class="overlay">
+        <h2 id="overlayTitle">PRESS START</h2>
+        <p id="overlayDesc">清除入侵的所有外星軍團。<br>擊殺越多，敵機速度越快！</p>
+        <button id="startBtn" class="btn">開始作戰 (SPACE)</button>
+      </div>
+    </div>
+
+    <!-- 儀表板與狀態欄 -->
+    <aside class="dashboard">
+      <!-- 即時戰況 -->
+      <div class="card">
+        <h3>即時戰況 <span>HUD</span></h3>
+        <div class="stat-row">
+          <span class="stat-label">目前分數</span>
+          <span id="currentScore" class="stat-value">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">存活敵機</span>
+          <span id="remainingEnemies" class="stat-value">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">作戰時間</span>
+          <span id="gameTimer" class="stat-value">00:00.0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">生命值</span>
+          <span id="playerLives" class="stat-value" style="color: var(--accent);">♥♥♥</span>
+        </div>
+      </div>
+
+      <!-- 個人最佳紀錄 -->
+      <div class="card">
+        <h3>最高紀錄 <span>RECORD</span></h3>
+        <div class="stat-row">
+          <span class="stat-label">最高分數</span>
+          <span id="bestScore" class="stat-value">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">最快耗時</span>
+          <span id="bestTime" class="stat-value">--:--</span>
+        </div>
+      </div>
+
+      <!-- 操作說明 -->
+      <div class="card">
+        <h3>操作指南 <span>CONTROLS</span></h3>
+        <div class="controls-hint">
+          <p><kbd>←</kbd> <kbd>→</kbd> 或 <kbd>A</kbd> <kbd>D</kbd>：左右推進戰機</p>
+          <p><kbd>Space</kbd>：發射能量彈（限單發）</p>
+          <p><kbd>P</kbd>：暫停 / 繼續</p>
+        </div>
+      </div>
+
+      <!-- Top 50 戰鬥日誌 -->
+      <div class="card">
+        <h3>戰鬥日誌 (TOP 50) <span>LOG</span></h3>
+        <div id="historyList" class="history-list">
+          <div style="color: #666; font-size: 0.8rem; text-align: center; padding: 10px;">暫無作戰紀錄</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    /**
+     * ========================================================
+     * 1. STORAGE SERVICE (防崩潰與持久化層)
+     * ========================================================
+     */
+    class StorageService {
+      static STORAGE_KEY = 'space_invaders_data_v1';
+      static MAX_HISTORY = 50;
+
+      // 記憶體 Fallback（防無痕模式 Quota 或 JSON 解析失敗崩潰）
+      static fallbackState = {
+        highScore: { score: 0, durationMs: 0, date: null },
+        history: []
+      };
+
+      static load() {
+        try {
+          const raw = localStorage.getItem(this.STORAGE_KEY);
+          if (!raw) return this.fallbackState;
+          const parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== 'object') throw new Error('Malformed schema');
+          return {
+            highScore: parsed.highScore || { score: 0, durationMs: 0, date: null },
+            history: Array.isArray(parsed.history) ? parsed.history : []
+          };
+        } catch (err) {
+          console.warn('[StorageService] 無法自 localStorage 讀取，降級使用記憶體狀態:', err);
+          return this.fallbackState;
+        }
+      }
+
+      static recordRun({ score, durationMs, result }) {
+        const data = this.load();
+        const runRecord = {
+          id: Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+          score,
+          durationMs,
+          result, // 'VICTORY' | 'DEFEAT'
+          timestamp: Date.now()
+        };
+
+        // 1. 歷史紀錄修剪：分數優先降序，同分則耗時少優先
+        data.history.push(runRecord);
+        data.history.sort((a, b) => {
+          if (b.score !== a.score) return b.score - a.score;
+          return a.durationMs - b.durationMs;
+        });
+        if (data.history.length > this.MAX_HISTORY) {
+          data.history = data.history.slice(0, this.MAX_HISTORY);
+        }
+
+        // 2. 刷新最高紀錄
+        if (score > data.highScore.score || (score === data.highScore.score && durationMs < data.highScore.durationMs)) {
+          data.highScore = {
+            score,
+            durationMs,
+            date: runRecord.timestamp
+          };
+        }
+
+        this.fallbackState = data;
+
+        try {
+          localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
+        } catch (err) {
+          console.warn('[StorageService] 寫入 localStorage 失敗 (QuotaExceededError 或無痕模式):', err);
+        }
+
+        return data;
+      }
+    }
+
+    /**
+     * ========================================================
+     * 2. INPUT MANAGER (狀態字典追蹤，消除按鍵延遲)
+     * ========================================================
+     */
+    class InputManager {
+      constructor() {
+        this.keys = new Set();
+        this.shootTriggered = false;
+
+        window.addEventListener('keydown', (e) => {
+          if (['ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD', 'Space', 'KeyP'].includes(e.code)) {
+            e.preventDefault();
+          }
+          this.keys.add(e.code);
+          if (e.code === 'Space') {
+            this.shootTriggered = true;
+          }
+        });
+
+        window.addEventListener('keyup', (e) => {
+          this.keys.delete(e.code);
+        });
+      }
+
+      isLeft() {
+        return this.keys.has('ArrowLeft') || this.keys.has('KeyA');
+      }
+
+      isRight() {
+        return this.keys.has('ArrowRight') || this.keys.has('KeyD');
+      }
+
+      consumeShoot() {
+        const shot = this.shootTriggered;
+        this.shootTriggered = false;
+        return shot;
+      }
+
+      isPausePressed() {
+        const p = this.keys.has('KeyP');
+        if (p) this.keys.delete('KeyP'); // 單次觸發
+        return p;
+      }
+    }
+
+    /**
+     * ========================================================
+     * 3. GAME ENGINE & ENTITIES (固定步長、Fleet Bounding Box)
+     * ========================================================
+     */
+    const GameState = {
+      START: 'START',
+      PLAYING: 'PLAYING',
+      PAUSED: 'PAUSED',
+      VICTORY: 'VICTORY',
+      GAMEOVER: 'GAMEOVER'
+    };
+
+    class Game {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.width = canvas.width;
+        this.height = canvas.height;
+
+        this.input = new InputManager();
+        this.state = GameState.START;
+
+        // 固定時間步長常數 (60Hz)
+        this.TIMESTEP = 1000 / 60;
+        this.MAX_ACCUMULATOR = 250; // 防死亡螺旋 (Clamp)
+        this.lastTime = performance.now();
+        this.accumulator = 0;
+
+        // 統計資料
+        this.score = 0;
+        this.elapsedTime = 0;
+        this.lives = 3;
+
+        // 實體
+        this.player = null;
+        this.bullet = null; // 僅允許單發同屏
+        this.fleet = null;
+        this.particles = [];
+
+        this.initEntities();
+        this.bindUI();
+        this.renderHistoryUI();
+
+        // 啟動主迴圈
+        requestAnimationFrame(this.loop.bind(this));
+      }
+
+      initEntities() {
+        this.player = {
+          x: this.width / 2 - 20,
+          y: this.height - 40,
+          width: 40,
+          height: 18,
+          speed: 5
+        };
+
+        this.bullet = null; // 螢幕單彈限制
+        this.particles = [];
+
+        // 外星人艦隊初始化 (5 行 10 列)
+        const rows = 5;
+        const cols = 10;
+        const alienW = 32;
+        const alienH = 22;
+        const paddingX = 14;
+        const paddingY = 16;
+        const offsetX = 50;
+        const offsetY = 60;
+
+        const aliens = [];
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            aliens.push({
+              relX: c * (alienW + paddingX),
+              relY: r * (alienH + paddingY),
+              width: alienW,
+              height: alienH,
+              row: r,
+              alive: true
+            });
+          }
+        }
+
+        this.fleet = {
+          x: offsetX,
+          y: offsetY,
+          direction: 1, // 1: 右, -1: 左
+          baseSpeed: 1.2,
+          stepDownSize: 18,
+          totalAliens: aliens.length,
+          aliens: aliens
+        };
+      }
+
+      bindUI() {
+        this.startBtn = document.getElementById('startBtn');
+        this.overlay = document.getElementById('overlayScreen');
+        this.overlayTitle = document.getElementById('overlayTitle');
+        this.overlayDesc = document.getElementById('overlayDesc');
+
+        this.startBtn.addEventListener('click', () => this.handleActionClick());
+      }
+
+      handleActionClick() {
+        if (this.state === GameState.START || this.state === GameState.GAMEOVER || this.state === GameState.VICTORY) {
+          this.startNewGame();
+        } else if (this.state === GameState.PAUSED) {
+          this.setGameState(GameState.PLAYING);
+        }
+      }
+
+      startNewGame() {
+        this.score = 0;
+        this.elapsedTime = 0;
+        this.lives = 3;
+        this.initEntities();
+        this.setGameState(GameState.PLAYING);
+      }
+
+      setGameState(newState) {
+        this.state = newState;
+
+        switch (newState) {
+          case GameState.PLAYING:
+            this.overlay.classList.add('hidden');
+            break;
+
+          case GameState.PAUSED:
+            this.overlay.classList.remove('hidden');
+            this.overlayTitle.innerText = 'PAUSED';
+            this.overlayTitle.style.color = 'var(--accent-info)';
+            this.overlayDesc.innerText = '戰線暫停中。按下按鈕或空白鍵重返作戰。';
+            this.startBtn.innerText = '繼續作戰';
+            break;
+
+          case GameState.VICTORY:
+            this.overlay.classList.remove('hidden');
+            this.overlayTitle.innerText = 'MISSION CLEAR';
+            this.overlayTitle.style.color = 'var(--accent)';
+            this.overlayDesc.innerHTML = `作戰全勝！外星艦隊已被瓦解。<br>最終得分: ${this.score} | 總耗時: ${this.formatTime(this.elapsedTime)}`;
+            this.startBtn.innerText = '再次出擊';
+            StorageService.recordRun({
+              score: this.score,
+              durationMs: this.elapsedTime,
+              result: 'VICTORY'
+            });
+            this.renderHistoryUI();
+            break;
+
+          case GameState.GAMEOVER:
+            this.overlay.classList.remove('hidden');
+            this.overlayTitle.innerText = 'DEFENSE FAILED';
+            this.overlayTitle.style.color = 'var(--accent-danger)';
+            this.overlayDesc.innerHTML = `防線失守，基地遭到全面攻陷。<br>最終得分: ${this.score} | 存活時間: ${this.formatTime(this.elapsedTime)}`;
+            this.startBtn.innerText = '重新挑戰';
+            StorageService.recordRun({
+              score: this.score,
+              durationMs: this.elapsedTime,
+              result: 'DEFEAT'
+            });
+            this.renderHistoryUI();
+            break;
+        }
+      }
+
+      /**
+       * 固定步長核心迴圈
+       */
+      loop(currentTime) {
+        let frameDelta = currentTime - this.lastTime;
+        this.lastTime = currentTime;
+
+        // 防死亡螺旋：背景分頁換回時直接限制上限
+        if (frameDelta > this.MAX_ACCUMULATOR) {
+          frameDelta = this.MAX_ACCUMULATOR;
+        }
+
+        this.accumulator += frameDelta;
+
+        while (this.accumulator >= this.TIMESTEP) {
+          this.fixedUpdate(this.TIMESTEP);
+          this.accumulator -= this.TIMESTEP;
+        }
+
+        this.render();
+        requestAnimationFrame(this.loop.bind(this));
+      }
+
+      fixedUpdate(delta) {
+        // 全域切換暫停
+        if (this.input.isPausePressed()) {
+          if (this.state === GameState.PLAYING) this.setGameState(GameState.PAUSED);
+          else if (this.state === GameState.PAUSED) this.setGameState(GameState.PLAYING);
+        }
+
+        // 覆蓋層按空白鍵快捷啟動
+        if (this.state !== GameState.PLAYING && this.input.consumeShoot()) {
+          this.handleActionClick();
+          return;
+        }
+
+        if (this.state !== GameState.PLAYING) return;
+
+        this.elapsedTime += delta;
+
+        // 1. 玩家水平移動
+        if (this.input.isLeft()) {
+          this.player.x -= this.player.speed;
+        }
+        if (this.input.isRight()) {
+          this.player.x += this.player.speed;
+        }
+        // 邊界防禦
+        this.player.x = Math.max(10, Math.min(this.width - this.player.width - 10, this.player.x));
+
+        // 2. 玩家單彈射擊機制
+        if (this.input.consumeShoot() && this.bullet === null) {
+          this.bullet = {
+            x: this.player.x + this.player.width / 2 - 2,
+            y: this.player.y - 8,
+            width: 4,
+            height: 12,
+            speed: 9
+          };
+        }
+
+        // 3. 子彈移動與出界回收
+        if (this.bullet) {
+          this.bullet.y -= this.bullet.speed;
+          if (this.bullet.y + this.bullet.height < 0) {
+            this.bullet = null;
+          }
+        }
+
+        // 4. 外星艦隊移動 (Bounding Box 邊界計算 + 線性加速)
+        const activeAliens = this.fleet.aliens.filter(a => a.alive);
+        if (activeAliens.length === 0) {
+          this.setGameState(GameState.VICTORY);
+          return;
+        }
+
+        // 線性加速公式：殺得越多，倍率越高 (1.0x ~ 3.8x)
+        const aliveRatio = activeAliens.length / this.fleet.totalAliens;
+        const currentSpeed = this.fleet.baseSpeed * (1 + (1 - aliveRatio) * 2.8);
+
+        // 計算當前艦隊外接矩形邊界 (Bounding Box)
+        let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const a of activeAliens) {
+          const absX = this.fleet.x + a.relX;
+          const absY = this.fleet.y + a.relY;
+          if (absX < minX) minX = absX;
+          if (absX + a.width > maxX) maxX = absX + a.width;
+          if (absY + a.height > maxY) maxY = absY + a.height;
+        }
+
+        // 邊界反彈與全體下移
+        let nextX = this.fleet.x + currentSpeed * this.fleet.direction;
+        let bounced = false;
+
+        if (this.fleet.direction === 1 && maxX + currentSpeed >= this.width - 15) {
+          this.fleet.direction = -1;
+          bounced = true;
+        } else if (this.fleet.direction === -1 && minX - currentSpeed <= 15) {
+          this.fleet.direction = 1;
+          bounced = true;
+        }
+
+        if (bounced) {
+          this.fleet.y += this.fleet.stepDownSize;
+        } else {
+          this.fleet.x = nextX;
+        }
+
+        // 失敗判定：外星人壓迫到底線
+        if (maxY >= this.player.y) {
+          this.setGameState(GameState.GAMEOVER);
+          return;
+        }
+
+        // 5. 碰撞檢測 (AABB)
+        if (this.bullet) {
+          for (let i = 0; i < activeAliens.length; i++) {
+            const a = activeAliens[i];
+            const absX = this.fleet.x + a.relX;
+            const absY = this.fleet.y + a.relY;
+
+            if (
+              this.bullet.x < absX + a.width &&
+              this.bullet.x + this.bullet.width > absX &&
+              this.bullet.y < absY + a.height &&
+              this.bullet.y + this.bullet.height > absY
+            ) {
+              // 擊中！消滅敵機、增加分數、生成爆炸粒子、釋放單彈槽位
+              a.alive = false;
+              this.score += (5 - a.row) * 10;
+              this.createExplosion(absX + a.width / 2, absY + a.height / 2, '#00ff66');
+              this.bullet = null;
+              break;
+            }
+          }
+        }
+
+        // 6. 粒子更新
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+          const p = this.particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.life -= delta;
+          if (p.life <= 0) {
+            this.particles.splice(i, 1);
+          }
+        }
+
+        this.updateHUD(activeAliens.length);
+      }
+
+      createExplosion(x, y, color) {
+        for (let i = 0; i < 12; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * 3 + 1;
+          this.particles.push({
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 300,
+            maxLife: 300,
+            color
+          });
+        }
+      }
+
+      formatTime(ms) {
+        const totalSec = ms / 1000;
+        const mins = Math.floor(totalSec / 60).toString().padStart(2, '0');
+        const secs = Math.floor(totalSec % 60).toString().padStart(2, '0');
+        const tenths = Math.floor((ms % 1000) / 100);
+        return `${mins}:${secs}.${tenths}`;
+      }
+
+      updateHUD(remainingCount) {
+        document.getElementById('currentScore').innerText = this.score;
+        document.getElementById('remainingEnemies').innerText = remainingCount;
+        document.getElementById('gameTimer').innerText = this.formatTime(this.elapsedTime);
+      }
+
+      render() {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+
+        // 繪製星空網格微弱點綴
+        this.ctx.fillStyle = '#111827';
+        this.ctx.fillRect(0, this.height - 3, this.width, 1);
+
+        // 1. 繪製玩家戰鬥機
+        this.ctx.fillStyle = '#00e5ff';
+        this.ctx.fillRect(this.player.x, this.player.y + 6, this.player.width, this.player.height - 6);
+        // 砲管
+        this.ctx.fillRect(this.player.x + this.player.width / 2 - 3, this.player.y, 6, 8);
+
+        // 2. 繪製子彈
+        if (this.bullet) {
+          this.ctx.fillStyle = '#ffff00';
+          this.ctx.shadowBlur = 8;
+          this.ctx.shadowColor = '#ffff00';
+          this.ctx.fillRect(this.bullet.x, this.bullet.y, this.bullet.width, this.bullet.height);
+          this.ctx.shadowBlur = 0;
+        }
+
+        // 3. 繪製外星人
+        const alienPalette = ['#ff0055', '#ff3377', '#ffbb00', '#00ff66', '#00e5ff'];
+        if (this.fleet) {
+          for (const a of this.fleet.aliens) {
+            if (!a.alive) continue;
+            const absX = this.fleet.x + a.relX;
+            const absY = this.fleet.y + a.relY;
+
+            this.ctx.fillStyle = alienPalette[a.row] || '#ffffff';
+            // 像素風格矩形軀幹與眼睛
+            this.ctx.fillRect(absX + 4, absY, a.width - 8, a.height);
+            this.ctx.fillRect(absX, absY + 4, a.width, a.height - 8);
+            // 眼睛
+            this.ctx.fillStyle = '#000000';
+            this.ctx.fillRect(absX + 6, absY + 6, 4, 4);
+            this.ctx.fillRect(absX + a.width - 10, absY + 6, 4, 4);
+          }
+        }
+
+        // 4. 繪製爆炸粒子
+        for (const p of this.particles) {
+          const alpha = p.life / p.maxLife;
+          this.ctx.fillStyle = p.color;
+          this.ctx.globalAlpha = alpha;
+          this.ctx.fillRect(p.x, p.y, 3, 3);
+        }
+        this.ctx.globalAlpha = 1.0;
+      }
+
+      renderHistoryUI() {
+        const data = StorageService.load();
+
+        // 渲染 Best 紀錄
+        document.getElementById('bestScore').innerText = data.highScore.score || 0;
+        document.getElementById('bestTime').innerText = data.highScore.durationMs 
+          ? this.formatTime(data.highScore.durationMs) 
+          : '--:--';
+
+        // 渲染 Top 50 列表
+        const container = document.getElementById('historyList');
+        if (!data.history || data.history.length === 0) {
+          container.innerHTML = `<div style="color: #666; font-size: 0.8rem; text-align: center; padding: 10px;">暫無作戰紀錄</div>`;
+          return;
+        }
+
+        container.innerHTML = data.history.map((item, idx) => `
+          <div class="history-item ${item.result === 'VICTORY' ? 'win' : 'loss'}">
+            <span>#${idx + 1} [${item.result === 'VICTORY' ? 'WIN' : 'LOSS'}] ${item.score}分</span>
+            <span style="color: var(--text-dim);">${this.formatTime(item.durationMs)}</span>
+          </div>
+        `).join('');
+      }
+    }
+
+    // 啟動遊戲
+    window.addEventListener('DOMContentLoaded', () => {
+      new Game(document.getElementById('gameCanvas'));
+    });
+  </script>
+</body>
+</html>
